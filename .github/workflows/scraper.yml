@@ -1,0 +1,63 @@
+name: Gym Class Scraper
+
+on:
+  schedule:
+    # Run every day at 6 AM UTC (adjust for your timezone)
+    # This runs for 1 hour daily - the script itself runs once but completes quickly
+    - cron: '0 6 * * *'
+  
+  # Allow manual triggering
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    
+    # Add timeout to ensure it doesn't run longer than 1 hour
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Install Chromium dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libnss3 \
+            libatk-bridge2.0-0 \
+            libdrm2 \
+            libxkbcommon0 \
+            libgbm1 \
+            libasound2 \
+            libxrandr2 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxfixes3 \
+            libcups2
+      
+      - name: Run scraper
+        env:
+          GYM_USERNAME: ${{ secrets.GYM_USERNAME }}
+          GYM_PASSWORD: ${{ secrets.GYM_PASSWORD }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+        run: npm start
+      
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: scraper-logs
+          path: |
+            *.log
+            screenshots/*.png
+          retention-days: 7 
