@@ -43,7 +43,12 @@ jobs:
             libxcomposite1 \
             libxdamage1 \
             libxfixes3 \
-            libcups2
+            libcups2 \
+            libxss1 \
+            libxtst6 \
+            fonts-liberation \
+            libappindicator3-1 \
+            xdg-utils
       
       - name: Run scraper
         env:
