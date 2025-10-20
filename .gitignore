@@ -24,3 +24,10 @@ coverage/
 
 # Optional eslint cache
 .eslintcache
+
+# Screenshots and debug files
+screenshots/
+*.png
+booking-page.html
+full data.txt
+inspect-screenshot.png

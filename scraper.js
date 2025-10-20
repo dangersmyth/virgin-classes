@@ -75,20 +75,78 @@ async function scrapeGymClasses() {
     
     // Wait for the calendar to load
     await page.waitForSelector('.vaTimetable, [class*="timetable"]', { timeout: 10000 });
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Give time for dynamic content
-    
+    await new Promise(resolve => setTimeout(resolve, 3000)); // Give time for dynamic content and Angular rendering
+
     // Step 3: Select the second date from the right (the furthest bookable date)
     console.log('Selecting target date...');
-    
-    const dateElements = await page.$$('[class*="date"], .date-selector, [role="button"][class*="day"]');
-    
-    if (dateElements.length < 2) {
-      throw new Error('Could not find enough date elements');
+
+    // Try to find all date elements with multiple strategies
+    // The page shows dates like "Monday\n20", "Tuesday\n21", etc. in clickable divs/buttons
+    const dateSelectors = [
+      '[ng-repeat*="date"]',  // Angular date repeat
+      'div[ng-click*="selectDate"]',  // Angular click handler for selecting dates
+      'a[ng-click*="date"]',
+      'div[ng-click*="date"]',
+      'button[ng-click*="date"]',
+      '[class*="date-button"]',
+      '[class*="dateButton"]',
+      '[class*="day-selector"]'
+    ];
+
+    let dateElements = [];
+
+    for (const selector of dateSelectors) {
+      const elements = await page.$$(selector);
+      if (elements.length > 0) {
+        // Filter to find elements that contain day names or date numbers
+        const validDates = [];
+        for (const el of elements) {
+          const text = await page.evaluate(e => e.textContent?.trim().replace(/\s+/g, ' '), el);
+          const isVisible = await page.evaluate(e => {
+            const rect = e.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0 && window.getComputedStyle(e).visibility !== 'hidden';
+          }, el);
+
+          // Check if element contains a day name and/or a number (date pattern)
+          const hasDate = text && /\d{1,2}/.test(text);
+          const hasDayName = text && /(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/.test(text);
+
+          if (isVisible && (hasDate || hasDayName)) {
+            validDates.push(el);
+          }
+        }
+        if (validDates.length > 0) {
+          dateElements = validDates;
+          console.log(`Found ${dateElements.length} date elements using selector: ${selector}`);
+          break;
+        }
+      }
     }
-    
+
+    console.log(`Total date elements found: ${dateElements.length}`);
+
+    if (dateElements.length < 2) {
+      throw new Error(`Could not find enough date elements (found ${dateElements.length}, need at least 2)`);
+    }
+
     // Click the second from right (index length-2)
     const targetDateElement = dateElements[dateElements.length - 2];
-    await targetDateElement.click();
+
+    // Scroll element into view before clicking
+    await page.evaluate(el => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, targetDateElement);
+
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Try multiple click methods to ensure it works
+    try {
+      await targetDateElement.click();
+    } catch (e) {
+      console.log('Regular click failed, trying JS click...');
+      await page.evaluate(el => el.click(), targetDateElement);
+    }
+
     await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for classes to load
     
     // Step 4: Verify the date turned red
@@ -117,43 +175,38 @@ async function scrapeGymClasses() {
     
     // Step 5: Scrape class data
     console.log('Scraping class data...');
-    
+
     const classes = await page.evaluate(() => {
       const classRows = document.querySelectorAll('[class*="classRow"], tr[class*="class"], .class-item');
       const scrapedData = [];
       
       classRows.forEach(row => {
         try {
-          // Extract time
-          const timeElement = row.querySelector('[class*="time"], .time, td:first-child');
-          const time = timeElement ? timeElement.textContent.trim() : '';
+          // Extract data from table cells
+          // Columns: Time, Class, Duration, Location, Instructor, (empty)
+          const cells = row.querySelectorAll('td');
+
+          let time = '', className = '', duration = '', location = '', instructor = '';
+
+          if (cells.length >= 5) {
+            time = cells[0]?.textContent.trim() || '';
+            className = cells[1]?.textContent.trim() || '';
+            duration = cells[2]?.textContent.trim() || '';
+            location = cells[3]?.textContent.trim() || '';
+            instructor = cells[4]?.textContent.trim() || '';
+          }
           
-          // Extract class name
-          const classElement = row.querySelector('[class*="class"], .class-name, td:nth-child(2)');
-          const className = classElement ? classElement.textContent.trim() : '';
-          
-          // Extract instructor
-          const instructorElement = row.querySelector('[class*="instructor"], .instructor, td:nth-child(3)');
-          const instructor = instructorElement ? instructorElement.textContent.trim() : '';
-          
-          // Determine availability status
+          // Determine availability status based on CSS classes
+          // rowFull = 0 spaces, rowGettingFull = 1-5 spaces, rowHasSpaces = >5 spaces
           let status = 'AVAILABLE';
           const rowClasses = row.className.toLowerCase();
-          const computedStyle = window.getComputedStyle(row);
-          const bgColor = computedStyle.backgroundColor;
-          
-          // Check left border or background color for status
-          const leftBorder = computedStyle.borderLeftColor;
-          
-          if (rowClasses.includes('full') || 
-              leftBorder.includes('255, 0, 0') || 
-              bgColor.includes('255, 0, 0')) {
-            status = 'FULL';
-          } else if (rowClasses.includes('low') || 
-                     leftBorder.includes('255, 165, 0') || 
-                     bgColor.includes('255, 165, 0') ||
-                     leftBorder.includes('orange')) {
-            status = 'LOW'; // <5 spots remaining
+
+          if (rowClasses.includes('rowfull')) {
+            status = 'FULL';  // 0 spaces remaining
+          } else if (rowClasses.includes('rowgettingfull')) {
+            status = 'LOW';   // 1-5 spaces remaining
+          } else if (rowClasses.includes('rowhasspaces')) {
+            status = 'AVAILABLE';  // >5 spaces remaining
           }
           
           // Extract spaces remaining if visible
@@ -166,9 +219,10 @@ async function scrapeGymClasses() {
             scrapedData.push({
               time,
               className,
+              duration,
+              location,
               instructor,
-              status,
-              spacesRemaining
+              status
             });
           }
         } catch (err) {
@@ -180,14 +234,22 @@ async function scrapeGymClasses() {
     });
     
     console.log(`Found ${classes.length} classes`);
-    
-    // Prepare data for database
-    const timestamp = new Date();
-    const documentsToInsert = classes.map(cls => ({
-      ...cls,
-      date: selectedDate,
-      scrapedAt: timestamp,
-      url: page.url()
+
+    // Get current time in AEST (Australian Eastern Standard Time)
+    // UTC+10 for standard time, UTC+11 for daylight saving
+    const now = new Date();
+    const aestTime = new Date(now.toLocaleString('en-US', { timeZone: 'Australia/Sydney' }));
+
+    // Prepare optimized data for database - only essential fields
+    const documentsToInsert = classes.map((cls, index) => ({
+      classId: `${selectedDate.replace(/\s+/g, '')}_${cls.time}_${cls.className}`.substring(0, 100),
+      status: cls.status,          // FULL, LOW, or AVAILABLE
+      classDate: selectedDate,      // Date of the class
+      time: cls.time,               // Time of class (e.g., "6:00am")
+      className: cls.className,     // Type of class
+      instructor: cls.instructor,   // Instructor name (e.g., "Clare S")
+      scrapedAt: aestTime,          // When we scraped (AEST)
+      index: index                  // Position in list
     }));
     
     // Step 6: Save to MongoDB
