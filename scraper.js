@@ -39,8 +39,14 @@ async function scrapeGymClasses() {
       headless: 'new',
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
-    
+
     const page = await browser.newPage();
+
+    // Set timezone to AEST to ensure dates are shown correctly
+    // This is critical for GitHub Actions which runs in UTC
+    await page.emulateTimezone('Australia/Sydney');
+    console.log('Timezone set to Australia/Sydney (AEST)');
+
     await page.setViewport({ width: 1280, height: 800 });
     
     // Step 1: Login

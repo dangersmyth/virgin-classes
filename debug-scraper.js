@@ -86,8 +86,13 @@ async function debugScraper() {
       slowMo: 100 // Slow down actions so you can see them
     });
     console.log('✓ Browser launched');
-    
+
     page = await browser.newPage();
+
+    // Set timezone to AEST to ensure dates are shown correctly
+    await page.emulateTimezone('Australia/Sydney');
+    console.log('✓ Timezone set to Australia/Sydney (AEST)');
+
     await page.setViewport({ width: 1280, height: 800 });
     console.log('✓ Page created');
     
@@ -290,11 +295,22 @@ async function debugScraper() {
 
       // Log information about each date element
       console.log('\nDate elements found:');
+      console.log('Current date/time in AEST:', new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' }));
+      console.log('');
+
       for (let i = 0; i < dateElements.length; i++) {
         const text = await page.evaluate(el => el.textContent, dateElements[i]);
         const classes = await page.evaluate(el => el.className, dateElements[i]);
-        console.log(`  [${i}]: ${text.trim()} (classes: ${classes})`);
+        const position = i === 0 ? 'FIRST (today?)' :
+                        i === dateElements.length - 1 ? 'LAST (furthest)' :
+                        i === dateElements.length - 2 ? '⭐ TARGET (1 week out)' : '';
+        console.log(`  [${i}]: ${text.trim()} ${position}`);
+        if (i === dateElements.length - 2) {
+          console.log(`       ^ This is what we'll select`);
+        }
       }
+      console.log(`\nTotal dates available: ${dateElements.length}`);
+      console.log(`Selecting index ${dateElements.length - 2} (second from last)`);
 
       await takeScreenshot(page, '07-dates-visible');
       await waitForUser(`✓ Found ${dateElements.length} dates. Check browser to verify.`);
