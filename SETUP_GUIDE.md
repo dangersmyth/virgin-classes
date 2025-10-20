@@ -126,13 +126,13 @@ schedule:
 2. **Check MongoDB**
    - Go to MongoDB Atlas
    - Navigate to your cluster → Collections
-   - You should see a database `virginactive` with collection `classes`
+   - You should see a database `Project0` with collection `classes`
    - View the scraped data
 
 ### Step 5: Monitor and Maintain
 
 **View Results:**
-- MongoDB Atlas → Browse Collections → `virginactive` → `classes`
+- MongoDB Atlas → Browse Collections → `Project0` → `classes`
 - Each document contains: time, className, instructor, status, date, scrapedAt
 
 **Check Logs:**

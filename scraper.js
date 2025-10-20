@@ -10,7 +10,7 @@ const config = {
   username: process.env.GYM_USERNAME,
   password: process.env.GYM_PASSWORD,
   mongoUri: process.env.MONGODB_URI,
-  dbName: 'virginactive',
+  dbName: 'Project0',
   collectionName: 'classes'
 };
 
