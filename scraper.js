@@ -60,8 +60,8 @@ async function scrapeGymClasses() {
     await page.type('input[name="password"], input[type="password"]', config.password);
     
     // Click login button
-    await page.click('button[type="submit"], button:has-text("LOGIN")');
-    
+    await page.click('button[type="submit"]');
+
     // Wait for navigation after login
     await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
     console.log('Login successful!');
@@ -75,7 +75,7 @@ async function scrapeGymClasses() {
     
     // Wait for the calendar to load
     await page.waitForSelector('.vaTimetable, [class*="timetable"]', { timeout: 10000 });
-    await page.waitForTimeout(2000); // Give time for dynamic content
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Give time for dynamic content
     
     // Step 3: Select the second date from the right (the furthest bookable date)
     console.log('Selecting target date...');
@@ -89,7 +89,7 @@ async function scrapeGymClasses() {
     // Click the second from right (index length-2)
     const targetDateElement = dateElements[dateElements.length - 2];
     await targetDateElement.click();
-    await page.waitForTimeout(2000); // Wait for classes to load
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for classes to load
     
     // Step 4: Verify the date turned red
     console.log('Verifying date selection...');
