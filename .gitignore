@@ -34,3 +34,8 @@ inspect-screenshot.png
 
 # Logs
 logs/
+
+# Analysis outputs
+booking-speed-analysis.json
+fastest-filling-classes.csv
+booking-speed-report.html
