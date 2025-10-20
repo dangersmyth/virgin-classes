@@ -2,10 +2,12 @@ name: Gym Class Scraper
 
 on:
   schedule:
-    # Run every day at 6 AM UTC (adjust for your timezone)
-    # This runs for 1 hour daily - the script itself runs once but completes quickly
-    - cron: '0 6 * * *'
-  
+    # Run every 2 hours starting at 6 AM AEST (8 PM UTC previous day)
+    # AEST = UTC+10, so 6am AEST = 8pm UTC (previous day)
+    # Times: 6am, 8am, 10am, 12pm, 2pm, 4pm, 6pm, 8pm, 10pm AEST
+    # UTC:   8pm, 10pm, 12am, 2am, 4am, 6am, 8am, 10am, 12pm (previous/same day)
+    - cron: '0 20,22,0,2,4,6,8,10,12 * * *'
+
   # Allow manual triggering
   workflow_dispatch:
 
@@ -37,19 +39,20 @@ jobs:
             libdrm2 \
             libxkbcommon0 \
             libgbm1 \
-            libasound2 \
             libxrandr2 \
             libxcomposite1 \
             libxdamage1 \
             libxfixes3 \
             libcups2
+          # Install libasound2 (name varies by Ubuntu version)
+          sudo apt-get install -y libasound2t64 || sudo apt-get install -y libasound2
       
       - name: Run scraper
         env:
           GYM_USERNAME: ${{ secrets.GYM_USERNAME }}
           GYM_PASSWORD: ${{ secrets.GYM_PASSWORD }}
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
-        run: npm start
+        run: node debug-scraper.js
       
       - name: Upload logs on failure
         if: failure()
