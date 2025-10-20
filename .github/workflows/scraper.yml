@@ -44,8 +44,6 @@ jobs:
             libxdamage1 \
             libxfixes3 \
             libcups2
-          # Install libasound2 (name varies by Ubuntu version)
-          sudo apt-get install -y libasound2t64 || sudo apt-get install -y libasound2
       
       - name: Run scraper
         env:
