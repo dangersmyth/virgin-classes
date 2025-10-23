@@ -24,6 +24,40 @@ async function analyzeBookingSpeed() {
 
     console.log(`✓ Loaded ${allClasses.length} total records\n`);
 
+    // Check data coverage by day of week
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('📅 DATA COVERAGE CHECK');
+    console.log('═══════════════════════════════════════════════════════════════\n');
+
+    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const daysCovered = new Set();
+
+    allClasses.forEach(record => {
+      // Extract day from classDate
+      const dayMatch = record.classDate.match(/(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/i);
+      if (dayMatch) {
+        daysCovered.add(dayMatch[0]);
+      }
+    });
+
+    console.log('Days with data collected:');
+    daysOfWeek.forEach(day => {
+      const hasCoverage = daysCovered.has(day);
+      const icon = hasCoverage ? '✅' : '❌';
+      console.log(`  ${icon} ${day}`);
+    });
+
+    const missingDays = daysOfWeek.filter(day => !daysCovered.has(day));
+    if (missingDays.length > 0) {
+      console.log(`\n⚠️  WARNING: Missing data for ${missingDays.length} day(s): ${missingDays.join(', ')}`);
+      console.log('   Continue collecting data for complete weekly analysis.\n');
+    } else {
+      console.log(`\n✅ Complete coverage! Data for all 7 days of the week.\n`);
+    }
+
+    console.log(`Total unique days: ${daysCovered.size}/7`);
+    console.log('');
+
     // Group by unique class (same date + time + name)
     const classesByIdentifier = {};
 
@@ -211,9 +245,9 @@ async function analyzeBookingSpeed() {
 
     // Export filled classes as CSV
     const csv = [
-      'Rank,Class Name,Time,Date,Instructor,Hours to Fill,Hours to Low,Current Status',
+      'Rank,Class Name,Time,Day/Date,Instructor,Hours to Fill,Hours to Low,Current Status',
       ...filledClasses.map((cls, i) =>
-        `${i+1},"${cls.className}","${cls.time}","${cls.date.substring(0, 20)}","${cls.instructor}",${cls.hoursToFull.toFixed(1)},${cls.hoursToLow ? cls.hoursToLow.toFixed(1) : 'N/A'},${cls.currentStatus}`
+        `${i+1},"${cls.className}","${cls.time}","${cls.date.replace(/\s+/g, ' ')}","${cls.instructor}",${cls.hoursToFull.toFixed(1)},${cls.hoursToLow ? cls.hoursToLow.toFixed(1) : 'N/A'},${cls.currentStatus}`
       )
     ].join('\n');
 

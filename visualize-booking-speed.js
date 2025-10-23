@@ -17,6 +17,20 @@ async function visualizeBookingSpeed() {
   const results = JSON.parse(fs.readFileSync('booking-speed-analysis.json', 'utf8'));
   console.log(`Loaded ${results.length} classes\n`);
 
+  // Check data coverage
+  const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const daysCovered = new Set();
+
+  results.forEach(r => {
+    const dayMatch = r.date.match(/(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/i);
+    if (dayMatch) {
+      daysCovered.add(dayMatch[0]);
+    }
+  });
+
+  const missingDays = daysOfWeek.filter(day => !daysCovered.has(day));
+  const coverageComplete = missingDays.length === 0;
+
   // Generate HTML visualization (no dependencies required)
   const filledClasses = results.filter(r => r.everFilled).sort((a, b) => a.hoursToFull - b.hoursToFull);
   const neverFilled = results.filter(r => !r.everFilled);
@@ -87,6 +101,30 @@ async function visualizeBookingSpeed() {
         .badge-full { background: #ffebee; color: #c62828; }
         .badge-low { background: #fff3e0; color: #e65100; }
         .badge-available { background: #e8f5e9; color: #2e7d32; }
+        .coverage-warning {
+            background: #fff3e0;
+            border-left: 4px solid #f57c00;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .coverage-complete {
+            background: #e8f5e9;
+            border-left: 4px solid #388e3c;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .day-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            margin: 2px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+        .day-covered { background: #e8f5e9; color: #2e7d32; }
+        .day-missing { background: #ffebee; color: #c62828; }
         .chart-container {
             background: white;
             padding: 20px;
@@ -135,7 +173,20 @@ async function visualizeBookingSpeed() {
 </head>
 <body>
     <h1>🏋️ Virgin Active - Class Booking Speed Analysis</h1>
-    <p>Analysis of ${results.length} classes over 1 week period</p>
+    <p>Analysis of ${results.length} classes</p>
+
+    <div class="${coverageComplete ? 'coverage-complete' : 'coverage-warning'}">
+        <strong>${coverageComplete ? '✅ Complete Data Coverage' : '⚠️ Incomplete Data Coverage'}</strong>
+        <p style="margin: 10px 0;">
+            ${daysOfWeek.map(day =>
+                `<span class="day-badge ${daysCovered.has(day) ? 'day-covered' : 'day-missing'}">${day}</span>`
+            ).join('')}
+        </p>
+        ${!coverageComplete ?
+            `<p style="margin: 5px 0;">Missing data for: <strong>${missingDays.join(', ')}</strong>. Continue collecting for complete weekly analysis.</p>` :
+            `<p style="margin: 5px 0;">Data collected for all 7 days of the week!</p>`
+        }
+    </div>
 
     <div class="summary">
         <div class="card">
@@ -164,6 +215,7 @@ async function visualizeBookingSpeed() {
                     <th>Rank</th>
                     <th>Class</th>
                     <th>Time</th>
+                    <th>Day/Date</th>
                     <th>Instructor</th>
                     <th>Hours to Fill</th>
                     <th>Status</th>
@@ -175,6 +227,7 @@ async function visualizeBookingSpeed() {
                     <td><strong>${i + 1}</strong></td>
                     <td>${cls.className}</td>
                     <td>${cls.time}</td>
+                    <td>${cls.date.replace(/\s+/g, ' ').substring(0, 25)}</td>
                     <td>${cls.instructor}</td>
                     <td class="${cls.hoursToFull < 24 ? 'fast' : cls.hoursToFull < 72 ? 'medium' : 'slow'}">
                         ${cls.hoursToFull.toFixed(1)} hours
