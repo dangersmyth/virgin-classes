@@ -17,18 +17,33 @@ async function visualizeBookingSpeed() {
   const results = JSON.parse(fs.readFileSync('booking-speed-analysis.json', 'utf8'));
   console.log(`Loaded ${results.length} classes\n`);
 
-  // Check data coverage
+  // Check data coverage based on when we SCRAPED (not class dates)
   const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const daysCovered = new Set();
+  const scrapeDaysCovered = new Set();
 
-  results.forEach(r => {
-    const dayMatch = r.date.match(/(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/i);
-    if (dayMatch) {
-      daysCovered.add(dayMatch[0]);
-    }
+  // We need to re-read from MongoDB to get scrapedAt timestamps
+  const { MongoClient } = require('mongodb');
+  require('dotenv').config();
+
+  // Quick check of scrape days
+  const client = new MongoClient(process.env.MONGODB_URI);
+  await client.connect();
+  const db = client.db('Project0');
+  const collection = db.collection('classes');
+  const allRecords = await collection.find().toArray();
+
+  allRecords.forEach(record => {
+    const scrapeDate = new Date(record.scrapedAt);
+    const dayName = scrapeDate.toLocaleDateString('en-AU', {
+      timeZone: 'Australia/Sydney',
+      weekday: 'long'
+    });
+    scrapeDaysCovered.add(dayName);
   });
 
-  const missingDays = daysOfWeek.filter(day => !daysCovered.has(day));
+  await client.close();
+
+  const missingDays = daysOfWeek.filter(day => !scrapeDaysCovered.has(day));
   const coverageComplete = missingDays.length === 0;
 
   // Generate HTML visualization (no dependencies required)
@@ -176,15 +191,15 @@ async function visualizeBookingSpeed() {
     <p>Analysis of ${results.length} classes</p>
 
     <div class="${coverageComplete ? 'coverage-complete' : 'coverage-warning'}">
-        <strong>${coverageComplete ? '✅ Complete Data Coverage' : '⚠️ Incomplete Data Coverage'}</strong>
+        <strong>${coverageComplete ? '✅ Complete Data Collection Coverage' : '⚠️ Incomplete Data Collection Coverage'}</strong>
         <p style="margin: 10px 0;">
             ${daysOfWeek.map(day =>
-                `<span class="day-badge ${daysCovered.has(day) ? 'day-covered' : 'day-missing'}">${day}</span>`
+                `<span class="day-badge ${scrapeDaysCovered.has(day) ? 'day-covered' : 'day-missing'}">${day}</span>`
             ).join('')}
         </p>
         ${!coverageComplete ?
-            `<p style="margin: 5px 0;">Missing data for: <strong>${missingDays.join(', ')}</strong>. Continue collecting for complete weekly analysis.</p>` :
-            `<p style="margin: 5px 0;">Data collected for all 7 days of the week!</p>`
+            `<p style="margin: 5px 0;">Missing scrapes for: <strong>${missingDays.join(', ')}</strong>. Continue collecting for ${missingDays.length} more day(s) for complete weekly coverage.</p>` :
+            `<p style="margin: 5px 0;">Data scraped on all 7 days of the week!</p>`
         }
     </div>
 

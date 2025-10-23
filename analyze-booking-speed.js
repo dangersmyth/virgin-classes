@@ -26,36 +26,45 @@ async function analyzeBookingSpeed() {
 
     // Check data coverage by day of week
     console.log('═══════════════════════════════════════════════════════════════');
-    console.log('📅 DATA COVERAGE CHECK');
+    console.log('📅 DATA COLLECTION COVERAGE CHECK');
     console.log('═══════════════════════════════════════════════════════════════\n');
 
     const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const daysCovered = new Set();
+    const scrapeDaysCovered = new Set();
+    const uniqueScrapeDates = new Set();
 
     allClasses.forEach(record => {
-      // Extract day from classDate
-      const dayMatch = record.classDate.match(/(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/i);
-      if (dayMatch) {
-        daysCovered.add(dayMatch[0]);
-      }
+      // Check when data was COLLECTED (scrapedAt), not what day the class is on
+      const scrapeDate = new Date(record.scrapedAt);
+      const dayName = scrapeDate.toLocaleDateString('en-AU', {
+        timeZone: 'Australia/Sydney',
+        weekday: 'long'
+      });
+      const dateStr = scrapeDate.toLocaleDateString('en-AU', {
+        timeZone: 'Australia/Sydney'
+      });
+      scrapeDaysCovered.add(dayName);
+      uniqueScrapeDates.add(dateStr);
     });
 
-    console.log('Days with data collected:');
+    console.log('Days we collected data (scraped):');
     daysOfWeek.forEach(day => {
-      const hasCoverage = daysCovered.has(day);
+      const hasCoverage = scrapeDaysCovered.has(day);
       const icon = hasCoverage ? '✅' : '❌';
       console.log(`  ${icon} ${day}`);
     });
 
-    const missingDays = daysOfWeek.filter(day => !daysCovered.has(day));
+    console.log(`\nUnique scrape dates: ${Array.from(uniqueScrapeDates).sort().join(', ')}`);
+
+    const missingDays = daysOfWeek.filter(day => !scrapeDaysCovered.has(day));
     if (missingDays.length > 0) {
-      console.log(`\n⚠️  WARNING: Missing data for ${missingDays.length} day(s): ${missingDays.join(', ')}`);
-      console.log('   Continue collecting data for complete weekly analysis.\n');
+      console.log(`\n⚠️  WARNING: Missing scrapes for ${missingDays.length} day(s): ${missingDays.join(', ')}`);
+      console.log('   Continue collecting for 7 days to get data for all days of the week.\n');
     } else {
-      console.log(`\n✅ Complete coverage! Data for all 7 days of the week.\n`);
+      console.log(`\n✅ Complete coverage! Scraped on all 7 days of the week.\n`);
     }
 
-    console.log(`Total unique days: ${daysCovered.size}/7`);
+    console.log(`Total unique scrape days: ${scrapeDaysCovered.size}/7`);
     console.log('');
 
     // Group by unique class (same date + time + name)
