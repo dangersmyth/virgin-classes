@@ -55,7 +55,7 @@ jobs:
           GYM_USERNAME: ${{ secrets.GYM_USERNAME }}
           GYM_PASSWORD: ${{ secrets.GYM_PASSWORD }}
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
-        run: node debug-scraper.js
+        run: node scraper.js
       
       - name: Upload logs on failure
         if: failure()
