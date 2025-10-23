@@ -55,7 +55,13 @@ jobs:
           GYM_USERNAME: ${{ secrets.GYM_USERNAME }}
           GYM_PASSWORD: ${{ secrets.GYM_PASSWORD }}
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
-        run: node scraper.js
+          DISPLAY: :99
+        run: |
+          # Start Xvfb virtual display (required because scraper uses headless:false)
+          # The Virgin Active Angular app doesn't load properly in true headless mode
+          Xvfb :99 -screen 0 1280x800x24 > /dev/null 2>&1 &
+          sleep 2
+          node scraper.js
       
       - name: Upload logs on failure
         if: failure()

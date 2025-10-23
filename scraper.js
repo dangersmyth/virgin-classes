@@ -35,9 +35,18 @@ async function scrapeGymClasses() {
   
   try {
     console.log('Starting browser...');
+    // NOTE: Using headless: false because the Virgin Active Angular app
+    // does not properly load data in headless mode (API calls fail/hang)
+    // This works fine in GitHub Actions with Xvfb virtual display
     browser = await puppeteer.launch({
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      headless: false,  // Angular app requires visible browser to load data properly
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--window-size=1280,800'
+      ]
     });
 
     const page = await browser.newPage();
@@ -71,20 +80,128 @@ async function scrapeGymClasses() {
     // Wait for navigation after login
     await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
     console.log('Login successful!');
-    
+
+    // Give Angular time to fully bootstrap after login
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
     // Step 2: Navigate to Book a Class
     console.log('Navigating to book a class...');
     await page.goto('https://mylocker.virginactive.com.au/#/bookaclass', {
       waitUntil: 'networkidle2',
       timeout: 30000
     });
+
+    // Wait for Angular to handle the route change
+    await new Promise(resolve => setTimeout(resolve, 3000));
     
-    // Wait for the calendar to load
-    await page.waitForSelector('.vaTimetable, [class*="timetable"]', { timeout: 10000 });
-    await new Promise(resolve => setTimeout(resolve, 3000)); // Give time for dynamic content and Angular rendering
+    // Wait for the calendar page to load
+    console.log('Waiting for timetable container...');
+    await page.waitForSelector('.vaTimetable', { timeout: 15000 });
+    console.log('Timetable container found');
+
+    // Wait for Angular to bootstrap and load data
+    console.log('Waiting for Angular to bootstrap and load club/timetable data...');
+
+    try {
+      // First, wait for the loading spinner to disappear
+      await page.waitForFunction(
+        () => {
+          const loader = document.querySelector('.ajaxLoader, ajax-loader');
+          return !loader || loader.offsetParent === null || window.getComputedStyle(loader).display === 'none';
+        },
+        { timeout: 30000 }
+      );
+      console.log('✓ Loading spinner cleared');
+
+      // Wait for the club selector to be populated (this loads first)
+      await page.waitForFunction(
+        () => {
+          const clubSelect = document.querySelector('select.virginSelect');
+          return clubSelect && clubSelect.options.length > 1; // More than just the default option
+        },
+        { timeout: 30000 }
+      );
+      console.log('✓ Club selector populated');
+
+      // Now wait for date elements to render
+      await page.waitForFunction(
+        () => {
+          const datePicker = document.querySelector('.vaFlexDatePicker');
+          if (!datePicker) return false;
+          const renderedDates = datePicker.querySelectorAll('[ng-click*="date"], [ng-click*="selectDate"]');
+          return renderedDates.length > 0;
+        },
+        { timeout: 30000 }
+      );
+      console.log('✓ Date elements rendered');
+
+    } catch (e) {
+      console.error('✗ Timeout waiting for Angular to load data');
+      console.log('Taking screenshot for debugging...');
+      await page.screenshot({ path: 'screenshots/angular-timeout.png', fullPage: true });
+
+      // Log what we can see
+      const pageState = await page.evaluate(() => {
+        return {
+          hasLoader: !!document.querySelector('.ajaxLoader, ajax-loader'),
+          clubSelectOptions: document.querySelector('select.virginSelect')?.options.length || 0,
+          datePickerExists: !!document.querySelector('.vaFlexDatePicker'),
+          bodyText: document.body?.textContent?.substring(0, 500)
+        };
+      });
+      console.log('Page state:', JSON.stringify(pageState, null, 2));
+
+      throw new Error('Angular failed to load data within 30 seconds - possible API or authentication issue');
+    }
+
+    // Extra buffer for any animations/transitions
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Step 3: Select the second date from the right (the furthest bookable date)
     console.log('Selecting target date...');
+
+    // Debug: Take a screenshot and log page info
+    const fs = require('fs');
+    if (!fs.existsSync('screenshots')) {
+      fs.mkdirSync('screenshots', { recursive: true });
+    }
+    await page.screenshot({ path: 'screenshots/scraper-debug.png', fullPage: true });
+    console.log('Screenshot saved: screenshots/scraper-debug.png');
+
+    // Save HTML for debugging
+    const html = await page.content();
+    fs.writeFileSync('screenshots/scraper-page.html', html);
+    console.log('Page HTML saved: screenshots/scraper-page.html');
+
+    // Debug: Log what's on the page
+    const pageInfo = await page.evaluate(() => {
+      const allDivs = document.querySelectorAll('div');
+      const allElements = document.querySelectorAll('*');
+      const divsWithDay = [];
+      const bodyText = document.body?.textContent || '';
+
+      allDivs.forEach((div, idx) => {
+        const text = div.textContent?.trim();
+        if (text && /(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/.test(text) && text.length < 50) {
+          divsWithDay.push({
+            index: idx,
+            text: text.substring(0, 100),
+            classes: div.className,
+            ngRepeat: div.getAttribute('ng-repeat'),
+            ngClick: div.getAttribute('ng-click')
+          });
+        }
+      });
+
+      return {
+        url: window.location.href,
+        totalElements: allElements.length,
+        totalDivs: allDivs.length,
+        divsWithDay: divsWithDay.slice(0, 20),
+        bodyTextPreview: bodyText.substring(0, 500)
+      };
+    });
+    console.log('Page debug info:', JSON.stringify(pageInfo, null, 2));
 
     // Try to find all date elements with multiple strategies
     // The page shows dates like "Monday\n20", "Tuesday\n21", etc. in clickable divs/buttons
@@ -100,9 +217,12 @@ async function scrapeGymClasses() {
     ];
 
     let dateElements = [];
+    let usedSelector = '';
 
     for (const selector of dateSelectors) {
       const elements = await page.$$(selector);
+      console.log(`Trying selector "${selector}": found ${elements.length} elements`);
+
       if (elements.length > 0) {
         // Filter to find elements that contain day names or date numbers
         const validDates = [];
@@ -123,7 +243,8 @@ async function scrapeGymClasses() {
         }
         if (validDates.length > 0) {
           dateElements = validDates;
-          console.log(`Found ${dateElements.length} date elements using selector: ${selector}`);
+          usedSelector = selector;
+          console.log(`Found ${dateElements.length} valid date elements using selector: ${selector}`);
           break;
         }
       }
