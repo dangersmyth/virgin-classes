@@ -61,26 +61,51 @@ async function scrapeGymClasses() {
     // Step 1: Login
     console.log('Navigating to login page...');
     await page.goto('https://mylocker.virginactive.com.au/#/login', {
-      waitUntil: 'networkidle2',
-      timeout: 30000
+      waitUntil: 'domcontentloaded',  // More reliable for Angular apps in CI
+      timeout: 60000  // Longer timeout for GitHub Actions
     });
+
+    // Extra wait for Angular to initialize
+    await new Promise(resolve => setTimeout(resolve, 3000));
     
     console.log('Entering credentials...');
-    await page.waitForSelector('input[name="username"], input[type="text"]', { timeout: 10000 });
-    
+    await page.waitForSelector('input[name="username"], input[type="text"]', { timeout: 15000 });
+
     // Find and fill username field
-    await page.type('input[name="username"], input[type="text"]', config.username);
-    
+    await page.type('input[name="username"], input[type="text"]', config.username, { delay: 50 });
+
     // Find and fill password field
-    await page.type('input[name="password"], input[type="password"]', config.password);
-    
+    await page.type('input[name="password"], input[type="password"]', config.password, { delay: 50 });
+
+    console.log('Clicking login button...');
+
     // Click login button and wait for navigation
     // Use Promise.all to avoid race condition - wait for navigation BEFORE clicking
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }),
-      page.click('button[type="submit"]')
-    ]);
-    console.log('Login successful!');
+    // Use longer timeout and domcontentloaded for better reliability in CI environments
+    try {
+      await Promise.all([
+        page.waitForNavigation({
+          waitUntil: 'domcontentloaded',  // Less strict than networkidle2, works better in CI
+          timeout: 60000  // Longer timeout for GitHub Actions
+        }),
+        page.click('button[type="submit"]')
+      ]);
+      console.log('Login successful!');
+    } catch (error) {
+      console.error('Login navigation failed:', error.message);
+      // Try to save screenshot for debugging
+      try {
+        const fs = require('fs');
+        if (!fs.existsSync('screenshots')) {
+          fs.mkdirSync('screenshots', { recursive: true });
+        }
+        await page.screenshot({ path: 'screenshots/login-error.png', fullPage: true });
+        console.log('Screenshot saved to screenshots/login-error.png');
+      } catch (screenshotError) {
+        console.error('Could not save screenshot:', screenshotError.message);
+      }
+      throw error;
+    }
 
     // Give Angular time to fully bootstrap after login
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -88,12 +113,12 @@ async function scrapeGymClasses() {
     // Step 2: Navigate to Book a Class
     console.log('Navigating to book a class...');
     await page.goto('https://mylocker.virginactive.com.au/#/bookaclass', {
-      waitUntil: 'networkidle2',
-      timeout: 30000
+      waitUntil: 'domcontentloaded',  // More reliable for Angular apps in CI
+      timeout: 60000  // Longer timeout for GitHub Actions
     });
 
-    // Wait for Angular to handle the route change
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Wait for Angular to handle the route change (longer for CI)
+    await new Promise(resolve => setTimeout(resolve, 5000));
     
     // Wait for the calendar page to load
     console.log('Waiting for timetable container...');
@@ -110,7 +135,7 @@ async function scrapeGymClasses() {
           const loader = document.querySelector('.ajaxLoader, ajax-loader');
           return !loader || loader.offsetParent === null || window.getComputedStyle(loader).display === 'none';
         },
-        { timeout: 30000 }
+        { timeout: 60000 }  // Longer timeout for CI
       );
       console.log('✓ Loading spinner cleared');
 
@@ -120,7 +145,7 @@ async function scrapeGymClasses() {
           const clubSelect = document.querySelector('select.virginSelect');
           return clubSelect && clubSelect.options.length > 1; // More than just the default option
         },
-        { timeout: 30000 }
+        { timeout: 60000 }  // Longer timeout for CI
       );
       console.log('✓ Club selector populated');
 
@@ -132,7 +157,7 @@ async function scrapeGymClasses() {
           const renderedDates = datePicker.querySelectorAll('[ng-click*="date"], [ng-click*="selectDate"]');
           return renderedDates.length > 0;
         },
-        { timeout: 30000 }
+        { timeout: 60000 }  // Longer timeout for CI
       );
       console.log('✓ Date elements rendered');
 
