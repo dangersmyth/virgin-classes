@@ -74,11 +74,12 @@ async function scrapeGymClasses() {
     // Find and fill password field
     await page.type('input[name="password"], input[type="password"]', config.password);
     
-    // Click login button
-    await page.click('button[type="submit"]');
-
-    // Wait for navigation after login
-    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
+    // Click login button and wait for navigation
+    // Use Promise.all to avoid race condition - wait for navigation BEFORE clicking
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }),
+      page.click('button[type="submit"]')
+    ]);
     console.log('Login successful!');
 
     // Give Angular time to fully bootstrap after login

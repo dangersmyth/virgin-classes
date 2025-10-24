@@ -20,7 +20,7 @@ echo "Scraper started at: $(date)" >> "$LOG_FILE"
 echo "====================================" >> "$LOG_FILE"
 
 # Run debug-scraper (the working one)
-/usr/local/bin/node debug-scraper.js >> "$LOG_FILE" 2>&1
+/Users/smyth/.nvm/versions/node/v20.19.2/bin/node debug-scraper.js >> "$LOG_FILE" 2>&1
 
 # Log completion
 echo "====================================" >> "$LOG_FILE"
